@@ -1,6 +1,6 @@
 # dps-config
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust Tests](https://github.com/dimensionalpocket/dps-config-rs/actions/workflows/test.yml/badge.svg)](https://github.com/dimensionalpocket/dps-config-rs/actions/workflows/test.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Configuration management for the [DPS ecosystem](https://github.com/dimensionalpocket/dps-readme).
 
@@ -82,6 +82,7 @@ Computed getters derive values from base properties and have no setters or envir
 
 - `get_api_domain()` — returns `{api_subdomain}.{domain}` (e.g. `api.dps.localhost`)
 - `get_auth_api_url()` — returns `{protocol}://{auth_api_subdomain}.{api_subdomain}.{domain}{:port}` when port is set
+- `get_auth_api_session_secret_bytes()` — returns session secret as `Vec<u8>` for encryption libraries
 
 ```rust
 let mut c = DpsConfig::new();
@@ -89,6 +90,12 @@ c.set_api_subdomain("api");
 c.set_domain("dps.localhost");
 assert_eq!(c.get_api_domain(), "api.dps.localhost");
 assert_eq!(c.get_auth_api_url(), "https://auth.api.dps.localhost");
+
+// Session secret as bytes (convenient for encryption libraries)
+c.set_auth_api_session_secret(Some("my-32-byte-secret-key-here!!!"));
+if let Some(secret_bytes) = c.get_auth_api_session_secret_bytes() {
+    assert_eq!(secret_bytes.len(), 32);
+}
 ```
 
 ## Environment Variables
