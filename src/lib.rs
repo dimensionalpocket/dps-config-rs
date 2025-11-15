@@ -48,7 +48,9 @@ pub struct DpsConfig {
   auth_api_subdomain: Option<String>,
   auth_api_port: Option<u16>,
   auth_api_protocol: Option<String>,
-  auth_api_sqlite_file_path: Option<String>,
+  auth_api_insecure_cookie: Option<bool>,
+  auth_api_sqlite_main_file_path: Option<String>,
+  auth_api_sqlite_main_pool_size: Option<u16>,
   auth_api_session_secret: Option<String>,
   auth_api_session_ttl_seconds: Option<u64>,
 }
@@ -64,8 +66,11 @@ impl DpsConfig {
   /// - `DPS_AUTH_API_SUBDOMAIN`
   /// - `DPS_AUTH_API_PORT`
   /// - `DPS_AUTH_API_PROTOCOL`
-  /// - `DPS_AUTH_API_SQLITE_FILE_PATH`
+  /// - `DPS_AUTH_API_INSECURE_COOKIE` (use `"Y"` for true)
+  /// - `DPS_AUTH_API_SQLITE_MAIN_FILE_PATH`
+  /// - `DPS_AUTH_API_SQLITE_MAIN_POOL_SIZE`
   /// - `DPS_AUTH_API_SESSION_SECRET`
+  /// - `DPS_AUTH_API_SESSION_TTL_SECONDS`
   pub fn new() -> Self {
     Self {
       domain: load_env_string("DPS_DOMAIN"),
@@ -74,7 +79,9 @@ impl DpsConfig {
       auth_api_subdomain: load_env_string("DPS_AUTH_API_SUBDOMAIN"),
       auth_api_port: load_env_u16("DPS_AUTH_API_PORT"),
       auth_api_protocol: load_env_string("DPS_AUTH_API_PROTOCOL"),
-      auth_api_sqlite_file_path: load_env_string("DPS_AUTH_API_SQLITE_FILE_PATH"),
+      auth_api_insecure_cookie: load_env_bool("DPS_AUTH_API_INSECURE_COOKIE"),
+      auth_api_sqlite_main_file_path: load_env_string("DPS_AUTH_API_SQLITE_MAIN_FILE_PATH"),
+      auth_api_sqlite_main_pool_size: load_env_u16("DPS_AUTH_API_SQLITE_MAIN_POOL_SIZE"),
       auth_api_session_secret: load_env_string("DPS_AUTH_API_SESSION_SECRET"),
       auth_api_session_ttl_seconds: load_env_u64("DPS_AUTH_API_SESSION_TTL_SECONDS"),
     }
@@ -172,20 +179,47 @@ impl DpsConfig {
     self.auth_api_protocol = Some(value.to_string());
   }
 
-  /// Returns the SQLite file path for the Auth API or default
-  /// `"data/development.db"`.
+  /// Returns whether insecure cookies are enabled for Auth API.
+  /// Defaults to `false`.
   ///
-  /// Env var: `DPS_AUTH_API_SQLITE_FILE_PATH`
-  pub fn get_auth_api_sqlite_file_path(&self) -> String {
-    self
-      .auth_api_sqlite_file_path
-      .clone()
-      .unwrap_or_else(|| "data/development.db".to_string())
+  /// Env var: `DPS_AUTH_API_INSECURE_COOKIE` using `"Y"` for `true`.
+  pub fn get_auth_api_insecure_cookie(&self) -> bool {
+    self.auth_api_insecure_cookie.unwrap_or(false)
   }
 
-  /// Set the SQLite file path for Auth API.
-  pub fn set_auth_api_sqlite_file_path(&mut self, value: &str) {
-    self.auth_api_sqlite_file_path = Some(value.to_string());
+  /// Set whether insecure cookies are enabled for Auth API.
+  pub fn set_auth_api_insecure_cookie(&mut self, value: bool) {
+    self.auth_api_insecure_cookie = Some(value);
+  }
+
+  /// Returns the SQLite main database file path for the Auth API or default
+  /// `"data/main-development.db"`.
+  ///
+  /// Env var: `DPS_AUTH_API_SQLITE_MAIN_FILE_PATH`
+  pub fn get_auth_api_sqlite_main_file_path(&self) -> String {
+    self
+      .auth_api_sqlite_main_file_path
+      .clone()
+      .unwrap_or_else(|| "data/main-development.db".to_string())
+  }
+
+  /// Set the SQLite main database file path for Auth API.
+  pub fn set_auth_api_sqlite_main_file_path(&mut self, value: &str) {
+    self.auth_api_sqlite_main_file_path = Some(value.to_string());
+  }
+
+  /// Returns the SQLite main database connection pool size for Auth API.
+  /// Defaults to `1`.
+  ///
+  /// Env var: `DPS_AUTH_API_SQLITE_MAIN_POOL_SIZE`
+  pub fn get_auth_api_sqlite_main_pool_size(&self) -> u16 {
+    self.auth_api_sqlite_main_pool_size.unwrap_or(1)
+  }
+
+  /// Set the SQLite main database connection pool size for Auth API.
+  /// Use `None` to reset to default.
+  pub fn set_auth_api_sqlite_main_pool_size(&mut self, value: Option<u16>) {
+    self.auth_api_sqlite_main_pool_size = value;
   }
 
   /// Returns the auth API session secret as an owned `String`, if configured.
@@ -288,8 +322,10 @@ fn load_env_u64(key: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use serial_test::serial;
 
   #[test]
+  #[serial]
   fn test_default_values() {
     let config = DpsConfig::new();
     assert_eq!(config.get_domain(), "dps.localhost");
@@ -297,10 +333,12 @@ mod tests {
     assert!(!config.get_development_mode());
     assert_eq!(config.get_auth_api_subdomain(), "auth");
     assert_eq!(config.get_auth_api_protocol(), "https");
+    assert!(!config.get_auth_api_insecure_cookie());
     assert_eq!(
-      config.get_auth_api_sqlite_file_path(),
-      "data/development.db"
+      config.get_auth_api_sqlite_main_file_path(),
+      "data/main-development.db"
     );
+    assert_eq!(config.get_auth_api_sqlite_main_pool_size(), 1);
     assert!(config.get_auth_api_port().is_none());
     assert!(config.get_auth_api_session_secret().is_none());
     assert!(config.get_auth_api_session_secret_bytes().is_none());
@@ -365,6 +403,61 @@ mod tests {
   }
 
   #[test]
+  #[serial]
+  fn test_auth_api_insecure_cookie() {
+    // Test setter first (without env var interference)
+    let mut c = DpsConfig::new();
+    assert!(!c.get_auth_api_insecure_cookie());
+    c.set_auth_api_insecure_cookie(true);
+    assert!(c.get_auth_api_insecure_cookie());
+    c.set_auth_api_insecure_cookie(false);
+    assert!(!c.get_auth_api_insecure_cookie());
+
+    // Test env var loading
+    std::env::set_var("DPS_AUTH_API_INSECURE_COOKIE", "Y");
+    let c2 = DpsConfig::new();
+    assert!(c2.get_auth_api_insecure_cookie());
+    std::env::remove_var("DPS_AUTH_API_INSECURE_COOKIE");
+  }
+
+  #[test]
+  #[serial]
+  fn test_auth_api_sqlite_main_pool_size() {
+    // Test default and setter
+    let mut c = DpsConfig::new();
+    assert_eq!(c.get_auth_api_sqlite_main_pool_size(), 1);
+    c.set_auth_api_sqlite_main_pool_size(Some(12));
+    assert_eq!(c.get_auth_api_sqlite_main_pool_size(), 12);
+    c.set_auth_api_sqlite_main_pool_size(None);
+    assert_eq!(c.get_auth_api_sqlite_main_pool_size(), 1);
+
+    // Test env var loading
+    std::env::set_var("DPS_AUTH_API_SQLITE_MAIN_POOL_SIZE", "8");
+    let c2 = DpsConfig::new();
+    assert_eq!(c2.get_auth_api_sqlite_main_pool_size(), 8);
+    std::env::remove_var("DPS_AUTH_API_SQLITE_MAIN_POOL_SIZE");
+  }
+
+  #[test]
+  #[serial]
+  fn test_auth_api_sqlite_main_file_path() {
+    // Test default and setter
+    let mut c = DpsConfig::new();
+    assert_eq!(
+      c.get_auth_api_sqlite_main_file_path(),
+      "data/main-development.db"
+    );
+    c.set_auth_api_sqlite_main_file_path("data/custom.db");
+    assert_eq!(c.get_auth_api_sqlite_main_file_path(), "data/custom.db");
+
+    // Test env var loading
+    std::env::set_var("DPS_AUTH_API_SQLITE_MAIN_FILE_PATH", "data/test-main.db");
+    let c2 = DpsConfig::new();
+    assert_eq!(c2.get_auth_api_sqlite_main_file_path(), "data/test-main.db");
+    std::env::remove_var("DPS_AUTH_API_SQLITE_MAIN_FILE_PATH");
+  }
+
+  #[test]
   fn test_auth_api_session_secret_bytes() {
     let mut config = DpsConfig::new();
     config.set_auth_api_session_secret(Some("my-secret-key"));
@@ -381,19 +474,18 @@ mod tests {
   }
 
   #[test]
-  fn test_auth_api_session_ttl_seconds_default_and_set() {
+  #[serial]
+  fn test_auth_api_session_ttl_seconds() {
+    // Test default and setter
     let mut c = DpsConfig::new();
-    // default = 14 days in seconds
-    assert_eq!(c.get_auth_api_session_ttl_seconds(), 1209600);
+    assert_eq!(c.get_auth_api_session_ttl_seconds(), 1209600); // 14 days
     c.set_auth_api_session_ttl_seconds(Some(3600));
     assert_eq!(c.get_auth_api_session_ttl_seconds(), 3600);
-  }
 
-  #[test]
-  fn test_auth_api_session_ttl_seconds_from_env() {
+    // Test env var loading
     std::env::set_var("DPS_AUTH_API_SESSION_TTL_SECONDS", "1800");
-    let c = DpsConfig::new();
-    assert_eq!(c.get_auth_api_session_ttl_seconds(), 1800);
+    let c2 = DpsConfig::new();
+    assert_eq!(c2.get_auth_api_session_ttl_seconds(), 1800);
     std::env::remove_var("DPS_AUTH_API_SESSION_TTL_SECONDS");
   }
 }

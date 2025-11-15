@@ -16,4 +16,4 @@ crate-type = ["lib"]
 # No runtime dependencies
 
 [dev-dependencies]
-# No dev dependencies required
+serial_test = "3"
