@@ -24,8 +24,8 @@
 //!
 //! // override and compute
 //! config.set_domain("example.com");
-//! config.set_api_subdomain("api");
-//! assert_eq!(config.get_api_domain(), "api.example.com");
+//! config.set_api_path("api");
+//! assert_eq!(config.get_auth_api_url(), "https://auth.example.com/api");
 //! ```
 
 use std::env;
@@ -41,7 +41,7 @@ use std::env;
 pub struct DpsConfig {
   // Global properties
   domain: Option<String>,
-  api_subdomain: Option<String>,
+  api_path: Option<String>,
   development_mode: Option<bool>,
 
   // DpsAuthApi properties
@@ -61,7 +61,7 @@ impl DpsConfig {
   ///
   /// Environment variables:
   /// - `DPS_DOMAIN`
-  /// - `DPS_API_SUBDOMAIN`
+  /// - `DPS_API_PATH`
   /// - `DPS_DEVELOPMENT_MODE` (use `"Y"` for true)
   /// - `DPS_AUTH_API_SUBDOMAIN`
   /// - `DPS_AUTH_API_PORT`
@@ -74,7 +74,7 @@ impl DpsConfig {
   pub fn new() -> Self {
     Self {
       domain: load_env_string("DPS_DOMAIN"),
-      api_subdomain: load_env_string("DPS_API_SUBDOMAIN"),
+      api_path: load_env_string("DPS_API_PATH"),
       development_mode: load_env_bool("DPS_DEVELOPMENT_MODE"),
       auth_api_subdomain: load_env_string("DPS_AUTH_API_SUBDOMAIN"),
       auth_api_port: load_env_u16("DPS_AUTH_API_PORT"),
@@ -106,19 +106,16 @@ impl DpsConfig {
     self.domain = Some(value.to_string());
   }
 
-  /// Returns the API subdomain or the default `"api"`.
+  /// Returns the API path or the default `"api"`.
   ///
-  /// Env var: `DPS_API_SUBDOMAIN`
-  pub fn get_api_subdomain(&self) -> String {
-    self
-      .api_subdomain
-      .clone()
-      .unwrap_or_else(|| "api".to_string())
+  /// Env var: `DPS_API_PATH`
+  pub fn get_api_path(&self) -> String {
+    self.api_path.clone().unwrap_or_else(|| "api".to_string())
   }
 
-  /// Set the API subdomain (overrides env).
-  pub fn set_api_subdomain(&mut self, value: &str) {
-    self.api_subdomain = Some(value.to_string());
+  /// Set the API path (overrides env).
+  pub fn set_api_path(&mut self, value: &str) {
+    self.api_path = Some(value.to_string());
   }
 
   /// Returns whether development mode is enabled. Defaults to `false`.
@@ -262,26 +259,20 @@ impl DpsConfig {
   // Computed getters
   // --------------------
 
-  /// Returns the computed API domain: `{api_subdomain}.{domain}`.
-  ///
-  /// Example: `api.dps.localhost`
-  pub fn get_api_domain(&self) -> String {
-    format!("{}.{}", self.get_api_subdomain(), self.get_domain())
-  }
-
   /// Returns the full Auth API URL, including protocol and optional port.
   ///
   /// Examples:
-  /// - `https://auth.api.dps.localhost`
-  /// - `http://auth.api.dps.localhost:3000`
+  /// - `https://auth.dps.localhost/api`
+  /// - `http://auth.dps.localhost:3000/api`
   pub fn get_auth_api_url(&self) -> String {
     let protocol = self.get_auth_api_protocol();
     let auth_sub = self.get_auth_api_subdomain();
-    let api_domain = self.get_api_domain();
+    let domain = self.get_domain();
+    let api_path = self.get_api_path();
     if let Some(port) = self.auth_api_port {
-      format!("{protocol}://{auth_sub}.{api_domain}:{port}")
+      format!("{protocol}://{auth_sub}.{domain}:{port}/{api_path}")
     } else {
-      format!("{protocol}://{auth_sub}.{api_domain}")
+      format!("{protocol}://{auth_sub}.{domain}/{api_path}")
     }
   }
 }
@@ -329,7 +320,7 @@ mod tests {
   fn test_default_values() {
     let config = DpsConfig::new();
     assert_eq!(config.get_domain(), "dps.localhost");
-    assert_eq!(config.get_api_subdomain(), "api");
+    assert_eq!(config.get_api_path(), "api");
     assert!(!config.get_development_mode());
     assert_eq!(config.get_auth_api_subdomain(), "auth");
     assert_eq!(config.get_auth_api_protocol(), "https");
@@ -348,11 +339,13 @@ mod tests {
   fn test_setters() {
     let mut config = DpsConfig::new();
     config.set_domain("example.com");
+    config.set_api_path("v1");
     config.set_development_mode(true);
     config.set_auth_api_port(Some(3000));
     config.set_auth_api_session_secret(Some("s3cr3t"));
 
     assert_eq!(config.get_domain(), "example.com");
+    assert_eq!(config.get_api_path(), "v1");
     assert!(config.get_development_mode());
     assert_eq!(config.get_auth_api_port(), Some(3000));
     assert_eq!(
@@ -362,21 +355,12 @@ mod tests {
   }
 
   #[test]
-  fn test_api_domain_computed() {
-    let mut config = DpsConfig::new();
-    config.set_api_subdomain("api");
-    config.set_domain("dps.localhost");
-    assert_eq!(config.get_api_domain(), "api.dps.localhost");
-  }
-
-  #[test]
   fn test_auth_api_url_without_port() {
     let mut config = DpsConfig::new();
     config.set_auth_api_protocol("https");
     config.set_auth_api_subdomain("auth");
-    config.set_api_subdomain("api");
     config.set_domain("dps.localhost");
-    assert_eq!(config.get_auth_api_url(), "https://auth.api.dps.localhost");
+    assert_eq!(config.get_auth_api_url(), "https://auth.dps.localhost/api");
   }
 
   #[test]
@@ -385,11 +369,10 @@ mod tests {
     config.set_auth_api_protocol("http");
     config.set_auth_api_port(Some(3000));
     config.set_auth_api_subdomain("auth");
-    config.set_api_subdomain("api");
     config.set_domain("dps.localhost");
     assert_eq!(
       config.get_auth_api_url(),
-      "http://auth.api.dps.localhost:3000"
+      "http://auth.dps.localhost:3000/api"
     );
   }
 
@@ -399,7 +382,7 @@ mod tests {
     config.set_domain("test.local");
     config.set_auth_api_protocol("http");
     config.set_auth_api_port(Some(8080));
-    assert_eq!(config.get_auth_api_url(), "http://auth.api.test.local:8080");
+    assert_eq!(config.get_auth_api_url(), "http://auth.test.local:8080/api");
   }
 
   #[test]
@@ -487,5 +470,21 @@ mod tests {
     let c2 = DpsConfig::new();
     assert_eq!(c2.get_auth_api_session_ttl_seconds(), 1800);
     std::env::remove_var("DPS_AUTH_API_SESSION_TTL_SECONDS");
+  }
+
+  #[test]
+  #[serial]
+  fn test_api_path() {
+    // Test default and setter
+    let mut c = DpsConfig::new();
+    assert_eq!(c.get_api_path(), "api");
+    c.set_api_path("v1");
+    assert_eq!(c.get_api_path(), "v1");
+
+    // Test env var loading
+    std::env::set_var("DPS_API_PATH", "api/v2");
+    let c2 = DpsConfig::new();
+    assert_eq!(c2.get_api_path(), "api/v2");
+    std::env::remove_var("DPS_API_PATH");
   }
 }

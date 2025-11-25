@@ -43,14 +43,15 @@ fn main() {
 
     // defaults
     let domain = config.get_domain();
-    let api_sub = config.get_api_subdomain();
+    let api_path = config.get_api_path();
 
     // overrides
     config.set_domain("example.com");
+    config.set_api_path("v1");
     config.set_development_mode(true);
 
-    let api_domain = config.get_api_domain();
-    println!("API domain: {}", api_domain);
+    let auth_api_url = config.get_auth_api_url();
+    println!("Auth API URL: {}", auth_api_url);
 }
 ```
 
@@ -64,7 +65,7 @@ Each property has a getter (`get_<property_name>()`) and a setter (`set_<propert
 | Property | Environment Variable | Default | Description |
 |----------|----------------------|---------|-------------|
 | `domain` | `DPS_DOMAIN` | `dps.localhost` | Main domain of the website |
-| `api_subdomain` | `DPS_API_SUBDOMAIN` | `api` | Subdomain for all APIs |
+| `api_path` | `DPS_API_PATH` | `api` | Path (without leading slash) for API endpoints |
 | `development_mode` | `DPS_DEVELOPMENT_MODE` | `false` | Enables development-only features |
 
 ### DpsAuthApi
@@ -84,16 +85,14 @@ Each property has a getter (`get_<property_name>()`) and a setter (`set_<propert
 
 Computed getters derive values from base properties and have no setters or environment variables.
 
-- `get_api_domain()` — returns `{api_subdomain}.{domain}` (e.g. `api.dps.localhost`)
-- `get_auth_api_url()` — returns `{protocol}://{auth_api_subdomain}.{api_subdomain}.{domain}{:port}` when port is set
+- `get_auth_api_url()` — returns `{protocol}://{auth_api_subdomain}.{domain}/{api_path}` (with `:{port}` appended after domain when port is set)
 - `get_auth_api_session_secret_bytes()` — returns session secret as `Vec<u8>` for encryption libraries
 
 ```rust
 let mut c = DpsConfig::new();
-c.set_api_subdomain("api");
+c.set_api_path("v1");
 c.set_domain("dps.localhost");
-assert_eq!(c.get_api_domain(), "api.dps.localhost");
-assert_eq!(c.get_auth_api_url(), "https://auth.api.dps.localhost");
+assert_eq!(c.get_auth_api_url(), "https://auth.dps.localhost/v1");
 
 // Session secret as bytes (convenient for encryption libraries)
 c.set_auth_api_session_secret(Some("my-32-byte-secret-key-here!!!"));
@@ -111,7 +110,7 @@ Example (development):
 
 ```bash
 export DPS_DOMAIN="dps.localhost"
-export DPS_API_SUBDOMAIN="api"
+export DPS_API_PATH="api"
 export DPS_DEVELOPMENT_MODE="Y"
 export DPS_AUTH_API_PROTOCOL="http"
 export DPS_AUTH_API_PORT="3000"
@@ -135,9 +134,10 @@ mod tests {
     fn auth_url_builds() {
         let mut c = DpsConfig::new();
         c.set_domain("test.local");
+        c.set_api_path("v1");
         c.set_auth_api_protocol("http");
         c.set_auth_api_port(Some(8080));
-        assert_eq!(c.get_auth_api_url(), "http://auth.api.test.local:8080");
+        assert_eq!(c.get_auth_api_url(), "http://auth.test.local:8080/v1");
     }
 
     #[test]
