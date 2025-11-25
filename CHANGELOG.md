@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/dimensionalpocket/dps-config-rs/compare/0.3.0...0.4.0) (2025-11-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove api_subdomain and introduce api_path configuration ([#11](https://github.com/dimensionalpocket/dps-config-rs/issues/11))
+
+### Features
+
+* remove api_subdomain and introduce api_path configuration ([#11](https://github.com/dimensionalpocket/dps-config-rs/issues/11)) ([091b0f5](https://github.com/dimensionalpocket/dps-config-rs/commit/091b0f5e33456f8021f9dbfdba1617e79275b1cb))
+
 ## [0.3.0](https://github.com/dimensionalpocket/dps-config-rs/compare/0.2.0...0.3.0) (2025-11-15)
 
 
