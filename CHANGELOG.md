@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/dimensionalpocket/dps-config-rs/compare/0.4.0...0.5.0) (2025-11-26)
+
+
+### Features
+
+* change auth_api_session_ttl_seconds type from u64 to u32 ([#13](https://github.com/dimensionalpocket/dps-config-rs/issues/13)) ([18e3960](https://github.com/dimensionalpocket/dps-config-rs/commit/18e396023c94805a12036b763b094c5cd2e8e043))
+
 ## [0.4.0](https://github.com/dimensionalpocket/dps-config-rs/compare/0.3.0...0.4.0) (2025-11-25)
 
 
